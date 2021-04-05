@@ -1,0 +1,11 @@
+#!/bin/sh
+#
+# v0.1 Installs the wp-cli tool
+
+SRC_URL="https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar"
+SRC_FILE="${SRC_URL##*/}"
+
+echo $SRC_FILE
+curl -O "$SRC_URL"
+chmod +x $SRC_FILE
+sudo mv $SRC_FILE /usr/local/bin/wp
