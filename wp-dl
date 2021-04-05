@@ -1,0 +1,21 @@
+#!/bin/sh
+#
+# v0.1 Downloads the wordpress package to the current dir.
+#
+
+SRC_URL="https://wordpress.org/latest.tar.gz"
+SRC_FILE="${SRC_URL##*/}"
+WEBSERVER_USER="www-data:www-data"
+DIR_PERM=750
+FILE_PERM=640
+
+curl -O "$SRC_URL" || exit $?
+tar xzvf $SRC_FILE
+rm $SRC_FILE
+touch wordpress/.htaccess
+cp wordpress/wp-config-sample.php wordpress/wp-config.php
+mkdir wordpress/wp-content/upgrade
+chown -R $WEBSERVER_USER wordpress
+
+find wordpress -type d -exec chmod $DIR_PERM  {} \;
+find wordpress -type f -exec chmod $FILE_PERM {} \;
