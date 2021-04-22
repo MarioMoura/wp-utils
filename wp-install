@@ -1,0 +1,195 @@
+#!/bin/bash
+#
+# Configures a wordpress site
+#
+# v0.1: options v, h, s, p, u, d added; First draft.
+
+stderr() { echo "$@" 1>&2; }
+
+
+VERSION="0.1"
+USAGE="
+USAGE: $(basename $0) -d <domain> -u <username> -p <password>
+
+	-h		Show this help
+	-u <username>	Set the username
+	-d <domain>	Set the domain name
+	-p <passwd>	Set the password
+	-s		Configure https
+	-v		Print version
+"
+
+while getopts ":hd:u:p:sv" opt
+do
+	case $opt in
+		v)
+			echo "Version $VERSION"
+			exit 0
+			;;
+		h)
+			echo "$USAGE";
+			exit 0
+			;;
+		s)
+			FLAG_HTTPS="yes"
+			;;
+		p)
+			PASSWORD="$OPTARG"
+			;;
+		u)
+			USERNAME="$OPTARG"
+			;;
+		d)
+			DOMAIN="$OPTARG"
+			;;
+		\?)
+			# Unknown Option
+			echo "ERROR: Unknown opt -$OPTARG"
+			exit 1
+			;;
+		:)
+			# Missing Argument
+			echo "ERROR: Missing argument for opt: -$OPTARG"
+			exit 1;
+			;;
+	esac
+done
+shift $((OPTIND-1))
+
+if [ -z "$DOMAIN" ]; then
+	read -p "Please type the desired domain name: " DOMAIN
+	if [ -z "$DOMAIN" ]; then
+		stderr "Empty domain name, aborting..."
+		exit 1
+	fi
+fi
+
+if [ -z "$USERNAME" ]; then
+	read -p "Please provide an username: " USERNAME
+	if [ -z "$USERNAME" ]; then
+		stderr "Empty username, aborting..."
+		exit 1
+	fi
+fi
+if [ -n "$(grep "^${USERNAME}:" /etc/passwd)" ]; then
+	stderr "Username picked"
+	exit 1
+fi
+
+if [ -z "$PASSWORD" ]; then
+	read -p "Please choose an password: " PASSWORD
+	read -p "Please type again: " PASSWORD_CHECK
+	if [ "$PASSWORD" != "$PASSWORD_CHECK" ]; then
+		stderr "Passwords differ!, aborting..."
+		exit 1
+	fi
+	if [ -z "$PASSWORD" ]; then
+		stderr "password cannot be empty!, aborting..."
+		exit 1
+	fi
+fi
+
+BASEDIRPATH="/var/www/html/$DOMAIN"
+SITEDIR="${BASEDIRPATH}/wordpress"
+
+WP_DB_NAME="${USERNAME}_wpdb"
+WP_DB_USER="${USERNAME}_user"
+WP_DB_PASS="$PASSWORD"
+WP_DIR="$SITEDIR"
+
+
+
+echo -e "\nPlease review this information: \n"
+
+echo " Domain name: $DOMAIN"
+echo " Site directory: $BASEDIRPATH"
+echo " Mariadb Database name: $WP_DB_NAME"
+echo " Mariadb Database user: $WP_DB_USER"
+echo " Mariadb Database password: $WP_DB_PASS"
+echo
+
+
+
+while [ "$CONTINUE" != "Y" -a "$CONTINUE" != "N" ]
+do
+	read -p "Continue? (Y)es/(N)o: " CONTINUE
+	if [ "$CONTINUE" == "N" ]; then
+		echo "Quitting..."
+		exit 0
+	fi
+done
+echo "Proceeding..."
+
+#user setup
+useradd -G sudo -m $USERNAME
+#sudo -u <user>
+
+mkdir -p $SITEDIR
+
+# Configure apache virtual host file
+echo "<VirtualHost *:80>
+	ServerName $DOMAIN
+	ServerAdmin webmaster@localhost
+	DocumentRoot ${SITEDIR}
+	ErrorLog \${APACHE_LOG_DIR}/error.log
+	CustomLog \${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
+<Directory ${SITEDIR}/>
+	AllowOverride All
+</Directory>" > /etc/apache2/sites-available/$DOMAIN.conf
+
+
+# Enable site
+a2ensite $DOMAIN
+
+# Get ssl certs and modify apache
+if [ -n "$FLAG_HTTPS" ]; then
+	certbot --apache -d $DOMAIN
+fi
+
+# Configure a wordpress database
+mariadb --execute "CREATE DATABASE ${WP_DB_NAME} DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci;"
+mariadb --execute "GRANT ALL ON ${WP_DB_NAME}.* TO '${WP_DB_USER}'@'localhost' IDENTIFIED BY '${WP_DB_PASS}';"
+mariadb --execute "FLUSH PRIVILEGES"
+
+# Preparing Files
+cd /tmp
+curl -O https://wordpress.org/latest.tar.gz
+tar xzvf latest.tar.gz
+touch /tmp/wordpress/.htaccess
+cp /tmp/wordpress/wp-config-sample.php /tmp/wordpress/wp-config.php
+mkdir /tmp/wordpress/wp-content/upgrade
+cp -a /tmp/wordpress/. $WP_DIR
+chown -R www-data:www-data $WP_DIR
+
+find $WP_DIR -type d -exec chmod 750 {} \;
+find $WP_DIR -type f -exec chmod 640 {} \;
+
+# Configuring wp-config.php
+WP_CONF="<?php
+define( 'DB_NAME', '${WP_DB_NAME}' );
+define( 'DB_USER', '${WP_DB_USER}' );
+define( 'DB_PASSWORD', '${WP_DB_PASS}' );
+define( 'DB_HOST', 'localhost' );
+define( 'DB_CHARSET', 'utf8' );
+define( 'DB_COLLATE', '' );
+define('FS_METHOD', 'direct');"
+
+WP_CONF="${WP_CONF}
+$(curl -s https://api.wordpress.org/secret-key/1.1/salt/)"
+
+WP_CONF="${WP_CONF}
+\$table_prefix = 'wp_';
+
+define( 'WP_DEBUG', false );
+
+if ( ! defined( 'ABSPATH' ) ) {
+			define( 'ABSPATH', __DIR__ . '/' );
+		}
+
+	require_once ABSPATH . 'wp-settings.php';"
+
+echo "${WP_CONF}" > ${WP_DIR}/wp-config.php
+
+
+systemctl reload apache2
