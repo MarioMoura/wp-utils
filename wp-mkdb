@@ -1,0 +1,80 @@
+#!/bin/sh
+#
+# Configures a single wordpress database instance
+#
+# v0.1
+
+stderr() { echo "$@" 1>&2; }
+
+VERSION="0.1"
+USAGE="
+USAGE: $(basename $0) -d <dbname> -u <user> -p <password>
+
+	-h		Show this help
+	-v		Print version
+"
+
+while getopts ":hvu:d:p:" opt
+do
+	case $opt in
+		v)
+			echo "Version $VERSION"
+			exit 0
+			;;
+		h)
+			echo "$USAGE";
+			exit 0
+			;;
+		u)
+			WP_DB_USER="$OPTARG"
+			;;
+		d)
+			WP_DB_NAME="$OPTARG"
+			;;
+		p)
+			WP_DB_PASS="$OPTARG"
+			;;
+		\?)
+			# Unknown Option
+			echo "ERROR: Unknown opt -$OPTARG"
+			exit 1
+			;;
+		:)
+			# Missing Argument
+			echo "ERROR: Missing argument for opt: -$OPTARG"
+			exit 1;
+			;;
+	esac
+done
+shift $((OPTIND-1))
+
+if [ -z "$WP_DB_USER" ]; then
+	read -p "Please provide an username: " WP_DB_USER
+	if [ -z "$WP_DB_USER" ]; then
+		stderr "Empty username, aborting..."
+		exit 1
+	fi
+fi
+
+if [ -z "$WP_DB_NAME" ]; then
+	read -p "Please provide the database name: " WP_DB_NAME
+	if [ -z "$WP_DB_NAME" ]; then
+		stderr "Empty DB name, aborting..."
+		exit 1
+	fi
+fi
+if [ -z "$WP_DB_PASS" ]; then
+	read -p "Please provide the database password: " WP_DB_PASS
+	if [ -z "$WP_DB_PASS" ]; then
+		stderr "Empty password, aborting..."
+		exit 1
+	fi
+fi
+ echo "$WP_DB_USER"
+ echo "$WP_DB_NAME"
+ echo "$WP_DB_PASS"
+
+
+mariadb --execute "CREATE DATABASE ${WP_DB_NAME} DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci;"
+mariadb --execute "GRANT ALL ON ${WP_DB_NAME}.* TO '${WP_DB_USER}'@'localhost' IDENTIFIED BY '${WP_DB_PASS}';"
+mariadb --execute "FLUSH PRIVILEGES"
