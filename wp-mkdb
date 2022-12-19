@@ -6,15 +6,15 @@
 
 stderr() { echo "$@" 1>&2; }
 
-VERSION="0.1"
+VERSION="0.2"
 USAGE="
-USAGE: $(basename $0) -d <dbname> -u <user> -p <password>
+USAGE: $(basename $0) [-s username | -w password ] -d <dbname> -u <user> -p <password>
 
 	-h		Show this help
 	-v		Print version
 "
 
-while getopts ":hvu:d:p:" opt
+while getopts ":hvu:d:p:s:w:" opt
 do
 	case $opt in
 		v)
@@ -24,6 +24,12 @@ do
 		h)
 			echo "$USAGE";
 			exit 0
+			;;
+		s)
+			MDB_USER="$OPTARG"
+			;;
+		w)
+			MDB_PASS="$OPTARG"
 			;;
 		u)
 			WP_DB_USER="$OPTARG"
@@ -75,6 +81,6 @@ fi
  echo "$WP_DB_PASS"
 
 
-mariadb --execute "CREATE DATABASE ${WP_DB_NAME} DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci;"
-mariadb --execute "GRANT ALL ON ${WP_DB_NAME}.* TO '${WP_DB_USER}'@'localhost' IDENTIFIED BY '${WP_DB_PASS}';"
-mariadb --execute "FLUSH PRIVILEGES"
+mariadb ${MDB_USER:+-u $MDB_USER} ${MDB_PASS:+--password=$MDB_PASS} --execute "CREATE DATABASE ${WP_DB_NAME} DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci;"
+mariadb ${MDB_USER:+-u $MDB_USER} ${MDB_PASS:+--password=$MDB_PASS} --execute "GRANT ALL ON ${WP_DB_NAME}.* TO '${WP_DB_USER}'@'localhost' IDENTIFIED BY '${WP_DB_PASS}';"
+mariadb ${MDB_USER:+-u $MDB_USER} ${MDB_PASS:+--password=$MDB_PASS} --execute "FLUSH PRIVILEGES"
