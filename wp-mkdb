@@ -76,9 +76,9 @@ if [ -z "$WP_DB_PASS" ]; then
 		exit 1
 	fi
 fi
- echo "$WP_DB_USER"
- echo "$WP_DB_NAME"
- echo "$WP_DB_PASS"
+echo "$WP_DB_USER"
+echo "$WP_DB_NAME"
+echo "$WP_DB_PASS"
 
 
 mariadb ${MDB_USER:+-u $MDB_USER} ${MDB_PASS:+--password=$MDB_PASS} --execute "CREATE DATABASE ${WP_DB_NAME} DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci;"
